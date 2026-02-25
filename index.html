@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ramadan Simulator</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      overflow: hidden;
+    }
+    video { display: none; }
+    canvas {
+      width: 100%;
+      height: 100%;
+      transform: scaleX(-1);
+      position: absolute;
+    }
+    #title {
+      position: absolute;
+      top: 16px;
+      width: 100%;
+      text-align: center;
+      font-size: 26px;
+      letter-spacing: 4px;
+      color: #d6b46a;
+      text-shadow: 0 0 10px rgba(214,180,106,0.6);
+      z-index: 5;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="title">RAMADAN SIMULATOR — BY REHAN</div>
+
+<video id="vid"></video>
+<canvas id="c"></canvas>
+
+<script>
+var vid = document.getElementById('vid');
+var c = document.getElementById('c');
+var ctx = c.getContext('2d');
+
+var arr = [];
+var cur = [];
+var ctrl = false;
+var draw = false;
+var sx = null, sy = null;
+
+window.onkeydown = e => {
+  if (e.key === 'Control') ctrl = true;
+  if (e.code === 'Space') arr = [];
+};
+window.onkeyup = e => {
+  if (e.key === 'Control') ctrl = false;
+};
+
+function drawBodyMask() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.ellipse(
+    c.width / 2,
+    c.height * 0.45,
+    c.width * 0.22,
+    c.height * 0.35,
+    0, 0, Math.PI * 2
+  );
+  ctx.fill();
+  ctx.restore();
+}
+
+function run(res) {
+  c.width = window.innerWidth;
+  c.height = window.innerHeight;
+
+  /* 🎥 Camera full draw */
+  ctx.drawImage(res.image, 0, 0, c.width, c.height);
+
+  /* 🖤 Black surface mask with body cutout */
+  drawBodyMask();
+
+  /* ✍ Dark Golden pen */
+  ctx.shadowColor = '#b89b4a';
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = '#b89b4a';
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  arr.forEach(stroke => {
+    ctx.beginPath();
+    stroke.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+  });
+
+  if (res.multiHandLandmarks) {
+    res.multiHandLandmarks.forEach(lm => {
+
+      drawConnectors(ctx, lm, HAND_CONNECTIONS, {
+        color: 'rgba(184,155,74,0.25)',
+        lineWidth: 2
+      });
+
+      drawLandmarks(ctx, lm, {
+        color: '#e6d39a',
+        radius: 2
+      });
+
+      let ind = lm[8];
+      let rx = ind.x * c.width;
+      let ry = ind.y * c.height;
+
+      if (sx == null) {
+        sx = rx; sy = ry;
+      } else {
+        sx += (rx - sx) * 0.45;
+        sy += (ry - sy) * 0.45;
+      }
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = ctrl ? '#e6d39a' : 'rgba(184,155,74,0.5)';
+      ctx.fill();
+
+      if (ctrl) {
+        if (!draw) {
+          draw = true;
+          cur = [];
+          arr.push(cur);
+        }
+        cur.push({ x: sx, y: sy });
+      } else draw = false;
+    });
+  } else {
+    draw = false;
+    sx = null;
+  }
+}
+
+var h = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+h.setOptions({
+  maxNumHands: 2,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+h.onResults(run);
+
+var cam = new Camera(vid, {
+  onFrame: async () => await h.send({ image: vid }),
+  width: 1280,
+  height: 720
+});
+cam.start();
+</script>
+
+</body>
+</html>
